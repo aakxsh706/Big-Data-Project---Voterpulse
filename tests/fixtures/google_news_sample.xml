@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+<channel>
+<title>"election unemployment India" - Google News</title>
+<link>https://news.google.com/search?q=election</link>
+<item>
+  <title>Youth unemployment dominates campaign rallies in Bihar - The Example Times</title>
+  <link>https://news.google.com/rss/articles/AAA1</link>
+  <pubDate>Mon, 05 Oct 2026 06:30:00 GMT</pubDate>
+  <source url="https://example-times.test">The Example Times</source>
+</item>
+<item>
+  <title>Youth Unemployment dominates campaign rallies in Bihar! - Sample Daily</title>
+  <link>https://news.google.com/rss/articles/AAA2</link>
+  <pubDate>Mon, 05 Oct 2026 07:00:00 GMT</pubDate>
+  <source url="https://sample-daily.test">Sample Daily</source>
+</item>
+<item>
+  <title>Power struggle in state cabinet ahead of polls &amp; manifesto launch - Sample Daily</title>
+  <link>https://news.google.com/rss/articles/AAA3</link>
+  <source url="https://sample-daily.test">Sample Daily</source>
+</item>
+<item>
+  <title></title>
+  <link>https://news.google.com/rss/articles/EMPTY</link>
+</item>
+</channel>
+</rss>

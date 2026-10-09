@@ -1,0 +1,21 @@
+# Local LLM settings (served by Ollama on this machine — no cloud calls).
+ollama:
+  host: "http://localhost:11434"     # env: VOTERPULSE_OLLAMA_HOST
+  # Llama 3.2 3B Instruct, Q4_K_M quantisation (~2.0 GB) — the default Ollama tag.
+  model: "llama3.2:3b"               # env: VOTERPULSE_MODEL
+  # Digest prefix shown by `ollama list` for llama3.2:3b when this project was
+  # written. The classifier reads the real digest from /api/tags at runtime, logs
+  # a warning if it differs, and stores "<model>@<digest>" with every classification.
+  # Run `ollama list` and update this if you deliberately change the model build.
+  expected_digest: "a80c4f17acd5"
+  timeout_seconds: 60
+  max_retries: 2                     # retries for transient errors (connection, 5xx, timeout)
+  backoff_seconds: 1.0               # 1 s, 2 s, ... capped below
+  backoff_max_seconds: 8.0
+  keep_alive: "15m"                  # keep the model loaded between scheduled runs
+options:
+  temperature: 0
+  seed: 42
+  top_p: 1
+  num_ctx: 4096
+  num_predict: 128

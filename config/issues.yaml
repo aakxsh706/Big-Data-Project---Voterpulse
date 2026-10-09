@@ -1,0 +1,243 @@
+# Policy issue definitions — the single source of truth.
+# The LLM prompt, the JSON schema enum, the keyword baseline and the dashboard
+# are all generated from this file. Do not hardcode issue names elsewhere.
+#
+# keywords:    case-insensitive, word-boundary phrases for the keyword baseline.
+#              A phrase may carry a weight with "phrase|weight" (default weight 1).
+# exclusions:  phrases that cancel a misleading keyword (e.g. "power struggle").
+#              Text matched by an exclusion is removed before keyword scoring.
+
+not_relevant_label: "Not an election issue"
+
+issues:
+  - key: jobs
+    name: "Jobs and Unemployment"
+    short_name: "Jobs"
+    description: >-
+      Employment, unemployment, job creation, recruitment drives, government jobs,
+      youth jobs, layoffs, wages, MGNREGA work days and job-related election promises.
+    keywords:
+      - "unemployment|2"
+      - "jobless|2"
+      - "jobs|2"
+      - "job"
+      - "employment|2"
+      - "recruitment"
+      - "layoffs|2"
+      - "layoff|2"
+      - "laid off|2"
+      - "job cuts|2"
+      - "hiring"
+      - "vacancies"
+      - "government jobs|2"
+      - "MGNREGA|2"
+      - "NREGA|2"
+      - "rozgar|2"
+      - "skilling"
+      - "wages"
+      - "naukri|2"
+    exclusions: []
+
+  - key: prices
+    name: "Prices and Inflation"
+    short_name: "Prices"
+    description: >-
+      Inflation, price rise (mehngai), cost of living, fuel, LPG cylinder, onion,
+      tomato and food prices, GST burden and price-related election promises.
+    keywords:
+      - "inflation|2"
+      - "price rise|2"
+      - "price hike|2"
+      - "prices|2"
+      - "mehngai|2"
+      - "mehangai|2"
+      - "cost of living|2"
+      - "costlier"
+      - "price stability"
+      - "LPG|2"
+      - "cylinder"
+      - "petrol"
+      - "diesel"
+      - "fuel price|2"
+      - "onion"
+      - "tomato"
+      - "CPI"
+      - "GST"
+    exclusions:
+      - "MSP hike"
+      - "tariff hike"
+
+  - key: law_order
+    name: "Law and Order"
+    short_name: "Law & Order"
+    description: >-
+      Crime, policing, violence, communal clashes, women's safety, riots,
+      encounters, gang activity and law-and-order promises or failures.
+    keywords:
+      - "law and order|3"
+      - "crime|2"
+      - "crimes|2"
+      - "police|2"
+      - "policing|2"
+      - "violence|2"
+      - "riot|2"
+      - "riots|2"
+      - "murder"
+      - "rape"
+      - "women's safety|2"
+      - "women safety|2"
+      - "encounter"
+      - "gangster"
+      - "clashes"
+      - "FIR"
+      - "lynching"
+    exclusions: []
+
+  - key: farmers
+    name: "Farmers and Agriculture"
+    short_name: "Farmers"
+    description: >-
+      Farmers, MSP (minimum support price), mandis, crops, procurement, farm loans
+      and loan waivers, fertiliser, irrigation, PM-KISAN and farmer protests.
+    keywords:
+      - "farmer|2"
+      - "farmers|2"
+      - "MSP|3"
+      - "mandi|2"
+      - "mandis|2"
+      - "agriculture|2"
+      - "agricultural|2"
+      - "farm|2"
+      - "crop"
+      - "crops"
+      - "kisan|2"
+      - "loan waiver|2"
+      - "procurement"
+      - "fertiliser"
+      - "fertilizer"
+      - "irrigation"
+      - "paddy"
+      - "wheat"
+    exclusions:
+      - "farm house"
+      - "farmhouse"
+
+  - key: utilities
+    name: "Electricity and Utilities"
+    short_name: "Utilities"
+    description: >-
+      Electricity supply, power cuts, power tariffs, free electricity units,
+      drinking water supply, roads, sanitation and other public utility services.
+      Political "power" (holding office, power struggle) is NOT this issue.
+    keywords:
+      - "electricity|3"
+      - "power cut|3"
+      - "power cuts|3"
+      - "power supply|3"
+      - "power tariff|3"
+      - "load shedding|3"
+      - "load-shedding|3"
+      - "free power|2"
+      - "units of power|2"
+      - "free units|2"
+      - "tariff hike|2"
+      - "discom|2"
+      - "discoms|2"
+      - "water supply|2"
+      - "drinking water|2"
+      - "blackout|2"
+      - "outage"
+      - "sanitation"
+    exclusions:
+      - "power struggle"
+      - "power tussle"
+      - "power play"
+      - "power-sharing"
+      - "power sharing"
+      - "come to power"
+      - "comes to power"
+      - "came to power"
+      - "in power"
+      - "out of power"
+      - "return to power"
+      - "power centre"
+      - "power center"
+      - "power broker"
+      - "power grab"
+      - "money power"
+
+  - key: health_education
+    name: "Health and Education"
+    short_name: "Health & Edu"
+    description: >-
+      Hospitals, healthcare, health insurance (e.g. Ayushman Bharat), doctors,
+      medicines, schools, colleges, teachers, exams, scholarships, free laptops
+      or tablets for students, and student transport schemes.
+    keywords:
+      - "hospital|2"
+      - "hospitals|2"
+      - "healthcare|2"
+      - "health|2"
+      - "Ayushman|2"
+      - "doctors"
+      - "medicines"
+      - "school|2"
+      - "schools|2"
+      - "education|2"
+      - "college"
+      - "colleges"
+      - "teachers"
+      - "students|2"
+      - "scholarship|2"
+      - "exam"
+      - "NEET|2"
+      - "laptops|2"
+      - "laptop|2"
+    exclusions: []
+
+# Few-shot examples embedded in the LLM prompt. These are hand-written by the
+# developers, NOT evaluation data: never reuse them in the 300-headline test set.
+prompt_examples:
+  - headline: "Power struggle in state cabinet ahead of polls"
+    issue: "Not an election issue"
+    evidence: "Power struggle in state cabinet"
+    secondary: null
+    note: "'power' refers to political control, not electricity"
+  - headline: "MSP hike fails to calm mandi protests"
+    issue: "Farmers and Agriculture"
+    evidence: "MSP hike ... mandi protests"
+    secondary: null
+  - headline: "Free laptops and bus rides promised during election campaign"
+    issue: "Health and Education"
+    evidence: "Free laptops"
+    secondary: null
+    note: "laptops are a student/education welfare promise"
+  - headline: "Party promises 200 free units of electricity to every household"
+    issue: "Electricity and Utilities"
+    evidence: "200 free units of electricity"
+    secondary: null
+  - headline: "Youth unemployment dominates campaign rallies in Bihar"
+    issue: "Jobs and Unemployment"
+    evidence: "Youth unemployment"
+    secondary: null
+  - headline: "LPG cylinder prices become poll plank as households feel the pinch"
+    issue: "Prices and Inflation"
+    evidence: "LPG cylinder prices"
+    secondary: null
+  - headline: "Opposition targets government over rising crimes against women"
+    issue: "Law and Order"
+    evidence: "rising crimes against women"
+    secondary: null
+  - headline: "Farm loan waiver and free bus travel top manifesto list"
+    issue: "Farmers and Agriculture"
+    evidence: "Farm loan waiver"
+    secondary: null
+  - headline: "Cricket team wins series in Australia"
+    issue: "Not an election issue"
+    evidence: "Cricket team wins series"
+    secondary: null
+  - headline: "Candidate files nomination papers amid heavy rain"
+    issue: "Not an election issue"
+    evidence: "files nomination papers"
+    secondary: null
+    note: "election procedure without a policy issue"

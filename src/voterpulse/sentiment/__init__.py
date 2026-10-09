@@ -1,0 +1,1 @@
+"""VoterPulse Lite — sentiment package."""

@@ -1,0 +1,23 @@
+# Score-to-language rules. Rationale and boundary examples: docs/thresholds.md.
+# Changing these values changes what citizens read — record every change and the
+# human-evaluation evidence for it in docs/thresholds.md.
+
+headline:
+  # VADER authors' recommended cut-offs (Hutto & Gilbert, 2014): compound >= 0.05
+  # positive, <= -0.05 negative, otherwise neutral.
+  positive_min: 0.05
+  negative_max: -0.05
+
+aggregate:
+  # An issue is "mostly positive/negative" only when BOTH the average compound score
+  # is clearly away from zero AND one side outnumbers the other by a clear margin.
+  positive_mean: 0.10
+  negative_mean: -0.10
+  share_margin: 0.10           # positive share - negative share (fraction, 0-1)
+  neutral_dominant_share: 0.60 # >= 60% neutral headlines and weak mean -> "mostly neutral"
+
+trend:
+  # Change in average compound score between the last completed 7-day window and
+  # the 7 days before it.
+  change_min: 0.05             # |delta| below this -> "broadly unchanged"
+  min_headlines_each_window: 25

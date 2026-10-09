@@ -1,0 +1,30 @@
+# Google News RSS search feeds. Search terms only RETRIEVE candidate headlines;
+# the classifier — not the query — decides the final issue label.
+# Coverage and availability depend entirely on Google News and may change
+# without notice.
+
+base_url: "https://news.google.com/rss/search"
+params:
+  hl: "en-IN"      # English (India) interface
+  gl: "IN"         # India edition
+  ceid: "IN:en"
+request:
+  timeout_seconds: 15
+  max_retries: 3
+  backoff_seconds: 2          # 2 s, 4 s, 8 s
+  pause_between_feeds_seconds: 2   # be polite: never hammer the endpoint
+  user_agent: "VoterPulseLite/1.0 (+local civic research tool)"
+
+feeds:
+  - key: jobs
+    query: 'election (unemployment OR jobs OR employment) India when:7d'
+  - key: prices
+    query: 'election (inflation OR "price rise" OR "LPG price" OR mehngai) India when:7d'
+  - key: law_order
+    query: 'election ("law and order" OR crime OR policing OR violence) India when:7d'
+  - key: farmers
+    query: 'election (farmers OR MSP OR agriculture OR mandi) India when:7d'
+  - key: utilities
+    query: 'election (electricity OR "power supply" OR "power tariff" OR "water supply") India when:7d'
+  - key: health_education
+    query: 'election (healthcare OR hospital OR schools OR education) India when:7d'

@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/demo/
+data/logs/
+data/evaluation/results/
+.DS_Store
+# generated locally; regenerate with: python scripts/evaluate.py sample
+data/evaluation/to_annotate.csv
+data/evaluation/annotated.csv

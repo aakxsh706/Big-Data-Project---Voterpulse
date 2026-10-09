@@ -1,0 +1,1 @@
+"""VoterPulse Lite — monitoring package."""

@@ -1,0 +1,46 @@
+# General application settings. Environment variables (see .env.example) override
+# the values marked "env:". Relative paths resolve from the project root.
+
+app:
+  name: "VoterPulse Lite"
+  timezone_display: "Asia/Kolkata"   # dashboard shows IST (UTC+05:30, no DST)
+
+database:
+  path: "data/voterpulse.db"         # env: VOTERPULSE_DB_PATH
+  demo_path: "data/demo/voterpulse_demo.db"
+  busy_timeout_ms: 10000             # wait for the writer instead of failing on lock
+
+demo:
+  enabled: false                     # env: VOTERPULSE_DEMO_MODE=1
+
+logging:
+  level: "INFO"                      # env: VOTERPULSE_LOG_LEVEL
+  file: "data/logs/voterpulse.log"
+  max_bytes: 2000000
+  backup_count: 3
+
+pipeline:
+  interval_minutes: 15
+  # A 3B model on a CPU-only laptop takes roughly 1-5 s per headline. Capping the
+  # number of LLM classifications per run keeps every run well inside 15 minutes;
+  # unclassified articles are picked up again by the next run (oldest first).
+  max_classifications_per_run: 120
+  # A run row stuck in "running" longer than this is treated as crashed.
+  stale_run_minutes: 30
+  # When Ollama refuses connections this many times in one run, stop trying the LLM
+  # for the rest of the run and use the keyword fallback (avoids N x timeout waits).
+  llm_circuit_breaker_failures: 3
+
+aggregation:
+  min_headlines: 25                  # below this an issue/window shows "Not enough data"
+  stale_after_minutes: 60            # data older than this is labelled "may be out of date"
+  recent_headlines_limit: 50
+
+alerts:
+  current_window_hours: 24           # rolling window being tested
+  reference_window_days: 7           # the 7 days immediately before the current window
+  min_current_headlines: 25          # same insufficient-data rule as the cards
+  min_reference_headlines: 25
+  trigger_delta: 0.15                # |current mean - reference mean| needed to trigger
+  large_delta: 0.30                  # severity "marked" at or above this
+  reset_delta: 0.075                 # hysteresis: alert resolves once |delta| < this

@@ -1,0 +1,1 @@
+"""VoterPulse Lite — dashboard package."""
