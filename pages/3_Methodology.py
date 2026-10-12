@@ -24,7 +24,9 @@ n = cfg.settings.aggregation.min_headlines
 st.header("1. Where the news comes from")
 st.markdown(
     f"Every {cfg.settings.pipeline.interval_minutes} minutes, VoterPulse asks **Google News** (India edition, "
-    "English) for recent headlines using one search per issue. Only the **headline**, publication, link and date "
+    f"English) for recent headlines about **{cfg.settings.region.name or 'India'}**, using one search per issue. "
+    "Headlines the classifier finds to be only about another state or country are rejected. "
+    "Only the **headline**, publication, link and date "
     "are stored — not the article text. The same headline arriving from several searches or publishers' "
     "variants is stored once.\n\n"
     "The searches only *find candidates*. They do not decide the issue."
@@ -83,8 +85,9 @@ st.markdown(
 st.header("6. Limitations — please read")
 st.markdown(
     "- **News tone is not public opinion.** Headlines reflect editorial choices, not what voters think.\n"
-    "- **Google News coverage is incomplete.** It favours large English-language outlets; regional and "
-    "Indian-language media are under-represented. A few outlets can dominate an issue (see *sources* on each issue).\n"
+    "- **Google News coverage is incomplete.** It favours large English-language outlets, and **Tamil-language "
+    "media are not included** (VADER scores English text only), so much of the local press is missing. "
+    "A few outlets can dominate an issue (see *sources* on each issue).\n"
     "- **Headline-only scoring.** A headline can be misleading on its own; the article may say something different.\n"
     "- **VADER was not built for Indian politics.** It can misread sarcasm, negation, Hindi/Hinglish words "
     "(e.g. *mehngai*) and policy terms. *“Crime falls”* contains the negative word *crime*.\n"

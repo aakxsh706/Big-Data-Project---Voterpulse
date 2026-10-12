@@ -1,8 +1,8 @@
 # VoterPulse Lite — Election Campaign Sentiment Tracking
 
-A free, fully local dashboard that shows how six Indian election policy issues are
-being **covered in the news**. It collects headlines from Google News every 15
-minutes, sorts them into issues with a local open-weight LLM, scores their wording with
+A free, fully local dashboard that shows how six election policy issues in
+**Tamil Nadu** are being **covered in the news**. It collects Tamil Nadu headlines from
+Google News every 15 minutes, sorts them into issues with a local open-weight LLM, scores their wording with
 VADER, and turns the numbers into short, cautious statements:
 
 > **Jobs and Unemployment**
@@ -29,13 +29,17 @@ fetch RSS feeds and to install packages and the model.
 9. [Project structure](#project-structure)
 10. [Verification status](#verification-status)
 11. [Limitations](#limitations)
+12. [MongoDB + Apache Spark](#mongodb--apache-spark)
 
 ## How it works
 
 ```
-Google News RSS → clean & hash → de-duplicate → local LLM (Ollama, Llama 3.2 3B)
-  → keyword cross-check (fallback if the LLM is unavailable) → VADER sentiment
+Google News RSS (Tamil Nadu searches) → clean & hash → de-duplicate → local LLM (Ollama, Llama 3.2 3B)
+  → keyword cross-check (fallback if the LLM is unavailable) → region filter → VADER sentiment
   → SQLite → aggregation → plain-language translation → Streamlit dashboard + alerts
+
+Big-data profile: SQLite change queue → MongoDB articles → Apache Spark (parallel VADER + daily aggregation)
+  → MongoDB daily summaries → Developer Insights / Big Data
 ```
 
 * Six issues plus *Not an election issue* are defined in `config/issues.yaml`. The LLM prompt,
@@ -46,6 +50,12 @@ Google News RSS → clean & hash → de-duplicate → local LLM (Ollama, Llama 3
   `keyword_fallback`. Disagreements between the LLM and the keywords go to a review
   queue, and the LLM label is kept.
 * Rejected headlines are stored for audit but never counted.
+* **Region scope (Tamil Nadu).** The searches target Tamil Nadu, and the LLM is told the region.
+  A deterministic filter also drops headlines that name another state or city (for example
+  "Bihar" or "Bengaluru") and nothing in Tamil Nadu; the matched place is stored. The lists
+  are `region` in `config/settings.yaml`. After editing them, run
+  `python scripts/run_pipeline.py --recheck-region`. Set `region.name: null` and use national
+  queries in `config/rss_feeds.yaml` for all-India coverage.
 * Fewer than 25 headlines gives **"Not enough data"** in grey.
 * Collection runs in its **own process**. The dashboard only reads, so it can never
   start duplicate schedulers.
@@ -59,6 +69,8 @@ Details: [docs/architecture.md](docs/architecture.md) ·
 * [Ollama](https://ollama.com) (free) and about 2.5 GB of free disk space for the model
 * 8 GB RAM recommended; no GPU required. Measure your own machine with the benchmark
   (see [Evaluation](#evaluation)); this has not yet been verified on an 8 GB machine.
+* For the big-data profile: MongoDB 8.0 (Docker Compose included), a **Java 17 JDK**, and
+  the additional dependencies in `requirements-big-data.txt`.
 
 ## Installation
 
@@ -126,7 +138,8 @@ Then open http://localhost:8501.
 ```bash
 python scripts/run_pipeline.py                         # RSS + LLM (keyword fallback if Ollama is down)
 python scripts/run_pipeline.py --no-llm                # keyword classifier only
-python scripts/run_pipeline.py --reclassify-fallbacks  # redo fallback rows once Ollama is back
+python scripts/run_pipeline.py --reclassify-fallbacks  # redo fallback / invalid rows with the LLM
+python scripts/run_pipeline.py --recheck-region        # re-apply region lists to stored headlines
 ```
 
 Each run classifies at most `max_classifications_per_run` (default 120) headlines, oldest
@@ -163,7 +176,9 @@ is involved) and scored by VADER. **Demo data must never be used as evaluation e
 ```bash
 pytest
 ```
-The tests are deterministic: no network access and no real Ollama (HTTP is faked).
+The base tests are deterministic: no external network access and no real Ollama (HTTP is faked).
+Spark transformation tests run on local workers when PySpark and Java are installed;
+otherwise they are skipped. Mongo synchronization tests use a fake driver.
 They cover ingestion, dedup, retries, LLM validation and fallback, caching, the keyword
 baseline, VADER boundaries, aggregation windows, every translation threshold boundary,
 alerts (trigger, duplicates, hysteresis, direction flip), the end-to-end pipeline, the
@@ -195,7 +210,10 @@ python scripts/evaluate.py benchmark --n 50 --cpu-only                        # 
 
 Environment overrides (or a `.env` file — see `.env.example`):
 `VOTERPULSE_DB_PATH`, `VOTERPULSE_DEMO_MODE`, `VOTERPULSE_OLLAMA_HOST`,
-`VOTERPULSE_MODEL`, `VOTERPULSE_LOG_LEVEL`.
+`VOTERPULSE_MODEL`, `VOTERPULSE_LOG_LEVEL`, `VOTERPULSE_BIG_DATA_ENABLED`,
+`VOTERPULSE_MONGO_URI`, `VOTERPULSE_MONGO_DATABASE`, `VOTERPULSE_MONGO_DEMO_DATABASE`,
+`VOTERPULSE_MONGO_TIMEOUT_MS`, `VOTERPULSE_SYNC_BATCH_SIZE`,
+`VOTERPULSE_SPARK_MASTER`, `VOTERPULSE_SPARK_PARTITIONS`.
 
 Logs: console and `data/logs/voterpulse.log` (rotating), as `key=value` lines.
 
@@ -213,7 +231,8 @@ src/voterpulse/
   monitoring/              pipeline, alerts, scheduler
   dashboard/               data_access, components, charts
   evaluation/              metrics, sampling, evaluate_classifier, evaluate_sentiment, benchmark
-scripts/                   init_db, run_pipeline, run_scheduler, generate_demo_data, evaluate
+  big_data/                MongoDB article synchronization + Apache Spark batch analytics
+scripts/                   init_db, run_pipeline, run_scheduler, generate_demo_data, evaluate, run_big_data
 tests/                     pytest suite + fixtures
 docs/                      architecture, methodology, thresholds, evaluation, usability_study
 data/                      SQLite databases, logs, evaluation files (git-ignored except templates)
@@ -246,8 +265,11 @@ Verified during development on macOS (Apple Silicon), Python 3.13:
 ## Limitations
 
 * News tone ≠ public opinion; headline tone ≠ article content.
-* Google News coverage is incomplete and favours large English-language outlets;
-  regional and Indian-language media are under-represented; a few sources can dominate.
+* Google News coverage is incomplete and favours large English-language outlets.
+  **Tamil-language media are not collected** (VADER scores English only), so much of
+  Tamil Nadu's local press is missing; a few sources can dominate.
+* The region filter only catches headlines that *name* another place; an out-of-state
+  story that names no place can still be counted.
 * VADER is a general English lexicon: sarcasm, negation ("crime falls"), Hinglish
   and policy terms are misread.
 * A 3B model makes mistakes; the review queue catches some, not all.
@@ -256,3 +278,78 @@ Verified during development on macOS (Apple Silicon), Python 3.13:
   (see docs/thresholds.md).
 * No data is collected while the machine is off; the dashboard says when data is stale.
 * No party rankings, approval ratings or predictions, by design.
+
+## MongoDB + Apache Spark
+
+The big-data profile stores denormalized article documents in **MongoDB** and reads them
+directly with the MongoDB Spark Connector. **Apache Spark** distributes VADER sentiment
+scoring and daily issue aggregation across partitions. Results and run metrics are stored
+in MongoDB and shown under **Developer Insights → Big Data**.
+
+SQLite remains the operational journal for RSS collection, LLM classifications, reviews,
+alerts, and the existing Overview/Issue Explorer pages. This is an additional batch
+analytics path; those existing pages still use their local aggregation logic.
+
+### Start the services
+
+Install a Java **17 JDK**, set `JAVA_HOME` to its installation directory, and verify
+`java -version`. Then, in the activated virtual environment:
+
+```bash
+pip install -r requirements-big-data.txt
+docker compose up -d mongodb
+```
+
+Docker runs MongoDB only. Spark runs on the host using PySpark and Java, using multiple
+local CPU cores by default (`local[*]`). The first Spark run needs internet access to
+download the pinned connector JARs. MongoDB data persists in the Compose named volume.
+
+Copy `.env.example` to `.env` if needed, retaining any existing settings, and set:
+
+```dotenv
+VOTERPULSE_BIG_DATA_ENABLED=1
+VOTERPULSE_MONGO_URI=mongodb://127.0.0.1:27017
+VOTERPULSE_SPARK_MASTER=local[*]
+VOTERPULSE_SPARK_PARTITIONS=4
+```
+
+Restart the collector/dashboard after changing environment settings. With this flag on,
+each collector run sends pending article changes to MongoDB. Spark batches run separately:
+
+```bash
+python scripts/run_pipeline.py --no-llm  # collect/classify + synchronize MongoDB
+python scripts/run_big_data.py          # synchronize existing/pending articles, then run Spark
+streamlit run app.py
+```
+
+### Demonstrate it with synthetic data
+
+```bash
+python scripts/generate_demo_data.py --days 90
+python scripts/run_big_data.py --demo --explain
+```
+
+Set `VOTERPULSE_DEMO_MODE=1` for the dashboard to view the demo results. The job's explicit
+`--demo` flag selects `voterpulse_demo`; without it the job selects the live `voterpulse`
+database. Synthetic data stays separate and is never evaluation evidence.
+
+The Big Data tab shows the successful batch's input count, accepted count, partition count,
+Spark version, duration, and daily sentiment results. `--explain` prints Spark's execution
+plan; the Spark UI at `http://localhost:4040` is available while the job runs. Local mode
+demonstrates parallel execution on one machine. It does not demonstrate a multi-machine
+cluster or establish production-scale throughput.
+
+### Maintenance commands
+
+```bash
+python scripts/run_big_data.py --sync-only    # update MongoDB without starting Java/Spark
+python scripts/run_big_data.py --skip-sync    # process the corpus already stored in MongoDB
+python scripts/run_big_data.py --full-sync    # resend all articles to an empty/new MongoDB destination
+docker compose stop mongodb                 # retain stored data
+```
+
+The SQLite outbox persists failed writes for retry, including reclassifications, region
+changes, and deletions. Existing articles are queued during migration. A MongoDB outage
+marks the collector run `partial` and leaves collected data available locally. Failed
+Spark jobs never replace the last successful dashboard result. Details, cluster setup,
+data contracts, and limitations: [docs/big_data.md](docs/big_data.md).

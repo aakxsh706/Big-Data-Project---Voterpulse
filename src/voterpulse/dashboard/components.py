@@ -100,13 +100,14 @@ def render_header(cfg: AppConfig, snap: da.Snapshot, now: datetime) -> None:
     left, right = st.columns([5, 1.3], vertical_alignment="bottom")
     with left:
         st.markdown('<div class="vp-title" role="heading" aria-level="1">VoterPulse Lite</div>'
-                    '<div class="vp-subtitle">Understand how India\'s election issues are being covered in the news.</div>',
+                    f'<div class="vp-subtitle">Understand how {escape(cfg.settings.region.name or "India")}\'s election issues '
+                    'are being covered in the news.</div>',
                     unsafe_allow_html=True)
     with right:
         with st.popover("ⓘ What is measured?", width="stretch"):
             st.markdown(
-                "**What this shows:** the *tone of news headlines* about six election issues, "
-                "collected from Google News every 15 minutes.\n\n"
+                f"**What this shows:** the *tone of news headlines* about six election issues in "
+                f"**{cfg.settings.region.name or 'India'}**, collected from Google News every 15 minutes.\n\n"
                 "**What it does not show:** what voters think, who is popular, or who will win.\n\n"
                 "Each headline is sorted into an issue by an AI model running on this computer, "
                 "then its wording is scored as positive, neutral or negative. "

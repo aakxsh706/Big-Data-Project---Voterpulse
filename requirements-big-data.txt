@@ -1,0 +1,4 @@
+# Install alongside the base dependencies: pip install -r requirements-big-data.txt
+-r requirements.txt
+pymongo>=4.10,<5
+pyspark==3.5.7

@@ -17,6 +17,7 @@ from datetime import datetime
 
 from voterpulse import database as db
 from voterpulse.classification.llm_classifier import OllamaClassifier
+from voterpulse.classification.region_filter import OUT_OF_REGION, RegionFilter
 from voterpulse.classification.service import HeadlineClassifier
 from voterpulse.config import AppConfig, RssConfig
 from voterpulse.ingestion.deduplicator import deduplicate_batch
@@ -40,6 +41,7 @@ class RunStats:
     llm_classified: int = 0
     fallback_classified: int = 0
     rejected: int = 0
+    out_of_region: int = 0
     failed: int = 0
     feeds_ok: int = 0
     feeds_failed: int = 0
@@ -56,6 +58,8 @@ class RunReport:
     feed_errors: dict[str, str] = field(default_factory=dict)
     llm_note: str | None = None
     backlog: int = 0
+    mongo_synced: int = 0
+    mongo_error: str | None = None
 
 
 def ingest(conn: sqlite3.Connection, feeds: list[FeedResult], stats: RunStats,
@@ -77,15 +81,23 @@ def ingest(conn: sqlite3.Connection, feeds: list[FeedResult], stats: RunStats,
 
 def classify_and_score(conn: sqlite3.Connection, cfg: AppConfig, classifier: HeadlineClassifier,
                        vader: VaderAnalyzer, stats: RunStats, limit: int) -> None:
-    """Classify pending articles (oldest first) and score the accepted ones."""
+    """Classify pending articles (oldest first) and score the accepted ones.
+
+    An article is accepted when it is about an election issue AND passes the region filter.
+    Out-of-region articles keep their issue label for audit but are never scored or counted.
+    """
     not_relevant = cfg.issues.not_relevant_label
+    region_filter = RegionFilter(cfg.settings.region)
     latencies: list[float] = []
     for row in db.unclassified_articles(conn, limit):
         try:
             outcome = classifier.classify(row["headline"], row["headline_hash"])
-            relevant = outcome.primary_issue != not_relevant
+            region = region_filter.check(row["headline"])
+            election_issue = outcome.primary_issue != not_relevant
+            relevant = election_issue and region.status != OUT_OF_REGION
             with db.transaction(conn):
-                db.save_classification(conn, row["id"], outcome, relevant)
+                db.save_classification(conn, row["id"], outcome, relevant,
+                                       region_status=region.status, region_evidence=region.evidence)
                 for reason in outcome.review_reasons:
                     llm_label = outcome.primary_issue if outcome.method.value == "llm" else None
                     db.add_review_item(conn, row["id"], llm_label, outcome.keyword_issue, reason)
@@ -98,8 +110,10 @@ def classify_and_score(conn: sqlite3.Connection, cfg: AppConfig, classifier: Hea
                     latencies.append(outcome.latency_ms)
             else:
                 stats.fallback_classified += 1
-            if not relevant:
+            if not election_issue:
                 stats.rejected += 1
+            elif not relevant:
+                stats.out_of_region += 1
         except Exception:
             stats.failed += 1
             log.exception("article_failed", extra=fields(article_id=row["id"]))
@@ -131,6 +145,34 @@ def reclassify_fallbacks(conn: sqlite3.Connection) -> int:
             conn.execute(f"DELETE FROM classifications WHERE article_id IN ({marks})", chunk)
     log.info("fallbacks_queued_for_reclassification", extra=fields(count=len(ids)))
     return len(ids)
+
+
+def recheck_region(conn: sqlite3.Connection, cfg: AppConfig) -> dict[str, int]:
+    """Re-apply the region filter to every stored classification (no LLM calls).
+
+    Use after editing ``region`` in settings.yaml. Articles that become in-region and are
+    election issues are scored now; ones that become out-of-region stop counting.
+    """
+    region_filter = RegionFilter(cfg.settings.region)
+    vader = VaderAnalyzer(cfg.thresholds.headline)
+    not_relevant = cfg.issues.not_relevant_label
+    changed = {"now_counted": 0, "now_excluded": 0}
+    rows = conn.execute("""SELECT c.article_id, c.primary_issue, c.is_relevant, a.headline
+                           FROM classifications c JOIN articles a ON a.id = c.article_id""").fetchall()
+    with db.transaction(conn):
+        for row in rows:
+            region = region_filter.check(row["headline"])
+            relevant = row["primary_issue"] != not_relevant and region.status != OUT_OF_REGION
+            conn.execute("""UPDATE classifications SET region_status = ?, region_evidence = ?, is_relevant = ?
+                            WHERE article_id = ?""",
+                         (region.status, region.evidence, int(relevant), row["article_id"]))
+            if relevant and not row["is_relevant"]:
+                changed["now_counted"] += 1
+                db.save_sentiment(conn, row["article_id"], vader.score(row["headline"]))
+            elif row["is_relevant"] and not relevant:
+                changed["now_excluded"] += 1
+    log.info("region_rechecked", extra=fields(**changed))
+    return changed
 
 
 def run_pipeline(cfg: AppConfig, conn: sqlite3.Connection | None = None, trigger: str = "manual",
@@ -176,15 +218,27 @@ def run_pipeline(cfg: AppConfig, conn: sqlite3.Connection | None = None, trigger
         evaluate_alerts(conn, cfg, now or utc_now())
         report.backlog = db.count_unclassified(conn)
 
+        if cfg.settings.big_data.enabled:
+            try:
+                from voterpulse.big_data.mongo_store import sync_articles
+                report.mongo_synced = sync_articles(conn, cfg, "live")
+            except Exception as exc:
+                # Driver exceptions may contain a credential-bearing URI. Keep only the
+                # exception type; the durable outbox will retry on the next run.
+                report.mongo_error = f"MongoDB sync failed ({type(exc).__name__}); pending changes will retry"
+                log.warning("mongo_sync_failed", extra=fields(error_type=type(exc).__name__))
+
         notes = []
         if report.feed_errors:
             notes.append("feeds failed: " + "; ".join(f"{k}: {v}" for k, v in report.feed_errors.items()))
         if report.llm_note:
             notes.append(f"LLM unavailable, keyword fallback used ({report.llm_note})")
+        if report.mongo_error:
+            notes.append(report.mongo_error)
         stats.error_info = " | ".join(notes) or None
         if stats.feeds_ok == 0:
             report.status = "failed"
-        elif stats.feeds_failed or stats.failed:
+        elif stats.feeds_failed or stats.failed or report.mongo_error:
             report.status = "partial"
         else:
             report.status = "success"

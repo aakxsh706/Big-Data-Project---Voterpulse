@@ -157,6 +157,120 @@ MIGRATIONS: list[str] = [
     -- At most one active alert per issue: a continuing shift updates that row.
     CREATE UNIQUE INDEX idx_alerts_one_active ON alerts(issue) WHERE status = 'active';
     """,
+    # ---- 2: geographic scope (region filter) --------------------------------------
+    """
+    ALTER TABLE classifications ADD COLUMN region_status TEXT NOT NULL DEFAULT 'not_checked'
+        CHECK (region_status IN ('in_region', 'out_of_region', 'not_checked'));
+    ALTER TABLE classifications ADD COLUMN region_evidence TEXT;
+    ALTER TABLE pipeline_runs ADD COLUMN out_of_region INTEGER DEFAULT 0;
+    """,
+    # ---- 3: durable MongoDB article synchronization -------------------------------
+    """
+
+    INSERT INTO meta(key, value) VALUES ('article_sync_source', lower(hex(randomblob(16))));
+
+    -- A monotonic clock avoids revision reuse when an acknowledged row is requeued.
+    CREATE TABLE article_sync_clock (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        revision INTEGER NOT NULL
+    );
+    INSERT INTO article_sync_clock(id, revision) VALUES (1, 0);
+    CREATE TABLE article_sync_outbox (
+        article_id INTEGER PRIMARY KEY,
+        revision INTEGER NOT NULL
+    );
+    CREATE INDEX idx_article_sync_revision ON article_sync_outbox(revision);
+    -- Hash-keyed tombstones survive SQLite reusing a deleted article's integer id.
+    CREATE TABLE article_sync_deletions (
+        headline_hash TEXT PRIMARY KEY,
+        revision INTEGER NOT NULL
+    );
+    INSERT INTO article_sync_outbox(article_id, revision) SELECT id, 0 FROM articles;
+
+    CREATE TRIGGER sync_articles_insert AFTER INSERT ON articles
+    BEGIN
+        UPDATE article_sync_clock SET revision = revision + 1 WHERE id = 1;
+        INSERT INTO article_sync_outbox(article_id, revision)
+        VALUES (NEW.id, (SELECT revision FROM article_sync_clock WHERE id = 1))
+        ON CONFLICT(article_id) DO UPDATE SET revision = excluded.revision;
+    END;
+
+    CREATE TRIGGER sync_articles_update AFTER UPDATE ON articles
+    BEGIN
+        UPDATE article_sync_clock SET revision = revision + 1 WHERE id = 1;
+        INSERT INTO article_sync_outbox(article_id, revision)
+        VALUES (NEW.id, (SELECT revision FROM article_sync_clock WHERE id = 1))
+        ON CONFLICT(article_id) DO UPDATE SET revision = excluded.revision;
+    END;
+
+    CREATE TRIGGER sync_articles_delete AFTER DELETE ON articles
+    BEGIN
+        UPDATE article_sync_clock SET revision = revision + 1 WHERE id = 1;
+        INSERT INTO article_sync_outbox(article_id, revision)
+        VALUES (OLD.id, (SELECT revision FROM article_sync_clock WHERE id = 1))
+        ON CONFLICT(article_id) DO UPDATE SET revision = excluded.revision;
+        INSERT INTO article_sync_deletions(headline_hash, revision)
+        VALUES (OLD.headline_hash, (SELECT revision FROM article_sync_clock WHERE id = 1))
+        ON CONFLICT(headline_hash) DO UPDATE SET revision = excluded.revision;
+    END;
+
+    CREATE TRIGGER sync_classifications_insert AFTER INSERT ON classifications
+    BEGIN
+        UPDATE article_sync_clock SET revision = revision + 1 WHERE id = 1;
+        INSERT INTO article_sync_outbox(article_id, revision)
+        VALUES (NEW.article_id, (SELECT revision FROM article_sync_clock WHERE id = 1))
+        ON CONFLICT(article_id) DO UPDATE SET revision = excluded.revision;
+    END;
+
+    CREATE TRIGGER sync_classifications_update AFTER UPDATE ON classifications
+    BEGIN
+        UPDATE article_sync_clock SET revision = revision + 1 WHERE id = 1;
+        INSERT INTO article_sync_outbox(article_id, revision)
+        VALUES (NEW.article_id, (SELECT revision FROM article_sync_clock WHERE id = 1))
+        ON CONFLICT(article_id) DO UPDATE SET revision = excluded.revision;
+    END;
+
+    CREATE TRIGGER sync_classifications_delete AFTER DELETE ON classifications
+    BEGIN
+        UPDATE article_sync_clock SET revision = revision + 1 WHERE id = 1;
+        INSERT INTO article_sync_outbox(article_id, revision)
+        VALUES (OLD.article_id, (SELECT revision FROM article_sync_clock WHERE id = 1))
+        ON CONFLICT(article_id) DO UPDATE SET revision = excluded.revision;
+    END;
+
+    CREATE TRIGGER sync_sentiment_scores_insert AFTER INSERT ON sentiment_scores
+    BEGIN
+        UPDATE article_sync_clock SET revision = revision + 1 WHERE id = 1;
+        INSERT INTO article_sync_outbox(article_id, revision)
+        VALUES (NEW.article_id, (SELECT revision FROM article_sync_clock WHERE id = 1))
+        ON CONFLICT(article_id) DO UPDATE SET revision = excluded.revision;
+    END;
+
+    CREATE TRIGGER sync_sentiment_scores_update AFTER UPDATE ON sentiment_scores
+    BEGIN
+        UPDATE article_sync_clock SET revision = revision + 1 WHERE id = 1;
+        INSERT INTO article_sync_outbox(article_id, revision)
+        VALUES (NEW.article_id, (SELECT revision FROM article_sync_clock WHERE id = 1))
+        ON CONFLICT(article_id) DO UPDATE SET revision = excluded.revision;
+    END;
+
+    CREATE TRIGGER sync_sentiment_scores_delete AFTER DELETE ON sentiment_scores
+    BEGIN
+        UPDATE article_sync_clock SET revision = revision + 1 WHERE id = 1;
+        INSERT INTO article_sync_outbox(article_id, revision)
+        VALUES (OLD.article_id, (SELECT revision FROM article_sync_clock WHERE id = 1))
+        ON CONFLICT(article_id) DO UPDATE SET revision = excluded.revision;
+    END;
+
+    CREATE TRIGGER sync_article_hash_change AFTER UPDATE OF headline_hash ON articles
+    WHEN OLD.headline_hash <> NEW.headline_hash
+    BEGIN
+        UPDATE article_sync_clock SET revision = revision + 1 WHERE id = 1;
+        INSERT INTO article_sync_deletions(headline_hash, revision)
+        VALUES (OLD.headline_hash, (SELECT revision FROM article_sync_clock WHERE id = 1))
+        ON CONFLICT(headline_hash) DO UPDATE SET revision = excluded.revision;
+    END;
+    """,
 ]
 
 
@@ -323,18 +437,20 @@ def put_cached_classification(conn: sqlite3.Connection, headline_hash: str,
 
 
 def save_classification(conn: sqlite3.Connection, article_id: int, outcome: ClassificationOutcome,
-                        is_relevant: bool, classified_at: datetime | None = None) -> None:
+                        is_relevant: bool, classified_at: datetime | None = None,
+                        region_status: str = "not_checked", region_evidence: str | None = None) -> None:
+    """``is_relevant`` = counts towards aggregation (an election issue AND inside the region)."""
     conn.execute(
         """INSERT INTO classifications
            (article_id, primary_issue, secondary_issue, evidence, method, keyword_issue,
             model_id, prompt_version, raw_response, validation_status, error, latency_ms,
-            from_cache, is_relevant, classified_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            from_cache, is_relevant, classified_at, region_status, region_evidence)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (article_id, outcome.primary_issue, outcome.secondary_issue, outcome.evidence,
          outcome.method.value, outcome.keyword_issue, outcome.model_id, outcome.prompt_version,
          outcome.raw_response, outcome.validation_status.value, outcome.error,
          outcome.latency_ms, int(outcome.from_cache), int(is_relevant),
-         to_utc_iso(classified_at or utc_now())),
+         to_utc_iso(classified_at or utc_now()), region_status, region_evidence),
     )
 
 
@@ -401,7 +517,8 @@ def start_run(conn: sqlite3.Connection, trigger: str, stale_after_minutes: int) 
 def finish_run(conn: sqlite3.Connection, run_id: int, status: str, stats: dict[str, Any]) -> None:
     allowed = {"headlines_collected", "new_headlines", "duplicates", "classified",
                "llm_classified", "fallback_classified", "rejected", "failed", "feeds_ok",
-               "feeds_failed", "avg_classification_ms", "duration_seconds", "error_info"}
+               "feeds_failed", "avg_classification_ms", "duration_seconds", "error_info",
+               "out_of_region"}
     unknown = set(stats) - allowed
     if unknown:
         raise ValueError(f"unknown run statistics: {sorted(unknown)}")

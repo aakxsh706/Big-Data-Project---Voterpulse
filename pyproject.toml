@@ -24,6 +24,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+big-data = ["pymongo>=4.10,<5", "pyspark==3.5.7"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

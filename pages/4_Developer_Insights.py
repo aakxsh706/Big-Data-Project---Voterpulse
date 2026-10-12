@@ -15,6 +15,7 @@ from voterpulse.classification.llm_classifier import OllamaClassifier  # noqa: E
 from voterpulse.dashboard import charts  # noqa: E402
 from voterpulse.dashboard import components as ui  # noqa: E402
 from voterpulse.dashboard import data_access as da  # noqa: E402
+from voterpulse.dashboard.big_data import render_big_data  # noqa: E402
 
 cfg = ui.page_setup("Developer Insights")
 now = ui.now_utc()
@@ -46,8 +47,9 @@ c4.metric("Ollama", "reachable" if ok else "unavailable")
 st.caption(f"Configured model: `{cfg.model.ollama.model}` · expected digest `{cfg.model.ollama.expected_digest}` · "
            f"detected: `{model_info}` · database: `{snap.db_path}`")
 
-tab_numbers, tab_class, tab_review, tab_runs, tab_alerts, tab_logs = st.tabs(
-    ["Sentiment numbers", "Classification", "Review queue", "Pipeline runs", "Alert history", "Logs"])
+tab_numbers, tab_class, tab_review, tab_runs, tab_alerts, tab_logs, tab_big_data = st.tabs(
+    ["Sentiment numbers", "Classification", "Review queue", "Pipeline runs", "Alert history", "Logs",
+     "Big data"])
 
 with tab_numbers:
     rows = []
@@ -82,6 +84,8 @@ with tab_class:
             ag = tables["agreement"].assign(agreement_rate=lambda d: (d["agree"] / d["headlines"]).round(3))
             st.markdown("**Agreement with keyword baseline**")
             st.dataframe(ag, hide_index=True, width="stretch")
+        st.markdown("**Region filter**")
+        st.dataframe(tables["region"], hide_index=True, width="stretch")
         st.markdown("**Models and prompt versions used**")
         st.dataframe(tables["models"], hide_index=True, width="stretch")
 
@@ -129,3 +133,6 @@ with tab_alerts:
 with tab_logs:
     text = da.tail_log(cfg, 300)
     st.code(text or "(log file is empty)", language=None)
+
+with tab_big_data:
+    render_big_data(cfg, now)

@@ -14,9 +14,10 @@ from typing import Any
 from voterpulse.config import IssuesConfig
 
 
-def build_system_prompt(issues_cfg: IssuesConfig) -> str:
+def build_system_prompt(issues_cfg: IssuesConfig, region: str | None = None) -> str:
+    scope = f"news about {region}, India" if region else "Indian news"
     lines = [
-        "You classify Indian news headlines by the election policy issue they are about.",
+        f"You classify {scope} headlines by the election policy issue they are about.",
         "",
         "Allowed issue labels:",
     ]
@@ -24,7 +25,8 @@ def build_system_prompt(issues_cfg: IssuesConfig) -> str:
         lines.append(f'- "{issue.name}": {issue.description}')
     lines.append(
         f'- "{issues_cfg.not_relevant_label}": the headline is not about any of the issues above '
-        "(for example sport, entertainment, party infighting, candidate lists, or election "
+        "(for example sport, entertainment, party infighting, alliances and seat sharing, leadership "
+        "contests, candidate lists, or election "
         "procedure with no policy content)."
     )
     lines += [
@@ -40,9 +42,14 @@ def build_system_prompt(issues_cfg: IssuesConfig) -> str:
         f"It must be null when the issue is \"{issues_cfg.not_relevant_label}\".",
         "5. Do not judge whether the news is good or bad. Only identify the issue.",
         "6. Reply with JSON only.",
-        "",
-        "Examples:",
     ]
+    if region:
+        lines.append(
+            f"7. These headlines were collected for {region}. If a headline is clearly only about another "
+            f"Indian state or another country, and not {region}, answer \"{issues_cfg.not_relevant_label}\". "
+            f"A headline that names no place is assumed to be about {region}."
+        )
+    lines += ["", "Examples:"]
     for ex in issues_cfg.prompt_examples:
         answer = {"issue": ex.issue, "evidence": ex.evidence, "secondary": ex.secondary}
         lines.append(f'Headline: "{ex.headline}"')
@@ -73,6 +80,6 @@ def response_schema(issues_cfg: IssuesConfig) -> dict[str, Any]:
     }
 
 
-def prompt_version(issues_cfg: IssuesConfig) -> str:
-    payload = build_system_prompt(issues_cfg) + json.dumps(response_schema(issues_cfg), sort_keys=True)
+def prompt_version(issues_cfg: IssuesConfig, region: str | None = None) -> str:
+    payload = build_system_prompt(issues_cfg, region) + json.dumps(response_schema(issues_cfg), sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]

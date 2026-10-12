@@ -44,20 +44,22 @@ class LLMResult:
 class OllamaClassifier:
     def __init__(self, ollama_cfg: OllamaConfig, options: dict[str, Any], issues_cfg: IssuesConfig,
                  session: requests.Session | None = None,
-                 sleep: Callable[[float], None] = time.sleep) -> None:
+                 sleep: Callable[[float], None] = time.sleep, region: str | None = None) -> None:
         self.cfg = ollama_cfg
         self.options = dict(options)
         self.options["temperature"] = 0  # fixed by design; not overridable
         self.issues_cfg = issues_cfg
         self.session = session or requests.Session()
         self._sleep = sleep
-        self.system_prompt = build_system_prompt(issues_cfg)
+        self.region = region
+        self.system_prompt = build_system_prompt(issues_cfg, region)
         self.schema = response_schema(issues_cfg)
-        self.prompt_version = prompt_version(issues_cfg)
+        self.prompt_version = prompt_version(issues_cfg, region)
         self._model_id: str | None = None
 
     @classmethod
     def from_config(cls, cfg: AppConfig, **kwargs: Any) -> "OllamaClassifier":
+        kwargs.setdefault("region", cfg.settings.region.name)
         return cls(cfg.model.ollama, cfg.model.options, cfg.issues, **kwargs)
 
     @property

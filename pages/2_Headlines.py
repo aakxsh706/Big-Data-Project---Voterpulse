@@ -50,7 +50,8 @@ with st.container(border=True):
     window = None
     with g2:
         window = ui.period_selector(snap, now, key="headlines_period", allow_custom=True)
-    show_rejected = st.toggle("Also show headlines rejected as “Not an election issue” or still waiting "
+    show_rejected = st.toggle("Also show headlines rejected as “Not an election issue”, outside "
+                              f"{cfg.settings.region.name or 'the region'}, or still waiting "
                               "(these never count towards any mood)")
 
 view = agg.in_window(df, window)
@@ -89,6 +90,9 @@ for _, row in chunk.iterrows():
                         + f"**Evidence words:** “{row['evidence'] or '—'}”  \n"
                         f"**Tone of the headline wording:** {label}  \n"
                         f"**Classified by:** {METHOD_TEXT.get(row['method'], '—')}")
+            if row.get("region_status") == "out_of_region":
+                st.caption(f"Not counted: this headline is about {row['region_evidence']}, outside "
+                           f"{cfg.settings.region.name}. It is kept only for auditing.")
             if isinstance(row["keyword_issue"], str) and row["keyword_issue"] != row["issue"]:
                 st.caption(f"The keyword cross-check suggested “{row['keyword_issue']}”, so this headline is in the review queue.")
             if row["validation_status"] == "evidence_unverified":

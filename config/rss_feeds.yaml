@@ -1,12 +1,17 @@
-# Google News RSS search feeds. Search terms only RETRIEVE candidate headlines;
-# the classifier — not the query — decides the final issue label.
-# Coverage and availability depend entirely on Google News and may change
-# without notice.
+# Google News RSS search feeds — scoped to TAMIL NADU.
+# Search terms only RETRIEVE candidate headlines; the classifier — not the query —
+# decides the final issue label, and rejects headlines clearly about other states.
+#
+# Queries are issue-focused rather than requiring the word "election": in testing,
+# adding "election" returned mostly polling-procedure stories (bypoll turnout, counting)
+# that carry no policy issue, while issue-focused Tamil Nadu queries returned the
+# coverage of jobs, prices, farming, power etc. that shapes election debate.
+# Coverage and availability depend entirely on Google News and may change without notice.
 
 base_url: "https://news.google.com/rss/search"
 params:
-  hl: "en-IN"      # English (India) interface
-  gl: "IN"         # India edition
+  hl: "en-IN"      # English (India) — VADER only scores English text
+  gl: "IN"
   ceid: "IN:en"
 request:
   timeout_seconds: 15
@@ -17,14 +22,14 @@ request:
 
 feeds:
   - key: jobs
-    query: 'election (unemployment OR jobs OR employment) India when:7d'
+    query: '("Tamil Nadu" OR Chennai) (unemployment OR jobs OR employment OR TNPSC OR recruitment OR layoffs) when:7d'
   - key: prices
-    query: 'election (inflation OR "price rise" OR "LPG price" OR mehngai) India when:7d'
+    query: '("Tamil Nadu" OR Chennai) (inflation OR "price rise" OR "price hike" OR "LPG price" OR "Aavin milk price" OR "vegetable prices") when:7d'
   - key: law_order
-    query: 'election ("law and order" OR crime OR policing OR violence) India when:7d'
+    query: '("Tamil Nadu" OR Chennai) ("law and order" OR crime OR police OR violence OR "women safety") when:7d'
   - key: farmers
-    query: 'election (farmers OR MSP OR agriculture OR mandi) India when:7d'
+    query: '("Tamil Nadu" OR Cauvery OR "delta farmers") (farmers OR MSP OR paddy OR procurement OR agriculture OR kuruvai OR samba) when:7d'
   - key: utilities
-    query: 'election (electricity OR "power supply" OR "power tariff" OR "water supply") India when:7d'
+    query: '("Tamil Nadu" OR Chennai OR TNPDCL OR TANGEDCO) ("power cut" OR electricity OR "power tariff" OR "water supply" OR "drinking water") when:7d'
   - key: health_education
-    query: 'election (healthcare OR hospital OR schools OR education) India when:7d'
+    query: '("Tamil Nadu" OR Chennai) (hospital OR healthcare OR "government schools" OR education OR NEET OR "breakfast scheme") when:7d'

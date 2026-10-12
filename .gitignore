@@ -8,8 +8,15 @@ data/*.db-wal
 data/*.db-shm
 data/demo/
 data/logs/
+data/spark/
+data/mongodb/
 data/evaluation/results/
 .DS_Store
+# Spark local runtime files
+artifacts/
+spark-warehouse/
+derby.log
+metastore_db/
 # generated locally; regenerate with: python scripts/evaluate.py sample
 data/evaluation/to_annotate.csv
 data/evaluation/annotated.csv

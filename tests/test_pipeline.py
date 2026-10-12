@@ -135,3 +135,43 @@ def test_reclassify_includes_invalid_llm_answers(cfg, conn):
     assert reclassify_fallbacks(conn) == 3
     good, _ = _llm(cfg)
     assert run_pipeline(cfg, conn, fetcher=lambda rss: [], llm=good, now=NOW).stats.llm_classified == 3
+
+
+def test_mongo_outage_retains_collection_and_reports_retry(cfg, conn, monkeypatch):
+    from voterpulse.big_data import mongo_store
+
+    cfg.settings.big_data.enabled = True
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("mongodb://private-user:private-password@server")
+
+    monkeypatch.setattr(mongo_store, "sync_articles", unavailable)
+    feeds = [f for f in _feeds() if f.ok]
+    report = run_pipeline(cfg, conn, fetcher=lambda rss: feeds, llm=False, now=NOW)
+    assert report.status == "partial"
+    assert report.stats.new_headlines == 3
+    assert report.stats.classified == 3
+    assert mongo_store.pending_articles(conn) == 3
+    assert "retry" in report.mongo_error
+    error = conn.execute("SELECT error_info FROM pipeline_runs").fetchone()[0]
+    assert "MongoDB sync failed" in error
+    assert "private-password" not in error
+
+
+def test_enabled_pipeline_syncs_live_after_classification(cfg, conn, monkeypatch):
+    from voterpulse.big_data import mongo_store
+
+    cfg.settings.big_data.enabled = True
+    calls = []
+
+    def sync(connection, config, kind):
+        assert connection.execute("SELECT COUNT(*) FROM classifications").fetchone()[0] == 3
+        calls.append(kind)
+        return 3
+
+    monkeypatch.setattr(mongo_store, "sync_articles", sync)
+    cfg.settings.demo_enabled = True  # collector always targets live, even with this flag
+    report = run_pipeline(cfg, conn, fetcher=lambda rss: [f for f in _feeds() if f.ok], llm=False, now=NOW)
+    assert calls == ["live"]
+    assert report.mongo_synced == 3
+    assert report.status == "success"

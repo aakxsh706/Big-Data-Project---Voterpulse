@@ -36,6 +36,9 @@ issues:
       - "skilling"
       - "wages"
       - "naukri|2"
+      - "TNPSC|2"
+      - "TNPSC Group|2"
+      - "Agniveer"
     exclusions: []
 
   - key: prices
@@ -63,6 +66,9 @@ issues:
       - "tomato"
       - "CPI"
       - "GST"
+      - "Aavin|2"
+      - "milk price|2"
+      - "bus fare"
     exclusions:
       - "MSP hike"
       - "tariff hike"
@@ -91,6 +97,9 @@ issues:
       - "clashes"
       - "FIR"
       - "lynching"
+      - "custodial death|2"
+      - "caste violence|2"
+      - "ganja"
     exclusions: []
 
   - key: farmers
@@ -118,6 +127,12 @@ issues:
       - "irrigation"
       - "paddy"
       - "wheat"
+      - "Cauvery|2"
+      - "delta farmers|3"
+      - "kuruvai|2"
+      - "samba|2"
+      - "sugarcane"
+      - "Mettur"
     exclusions:
       - "farm house"
       - "farmhouse"
@@ -148,6 +163,11 @@ issues:
       - "blackout|2"
       - "outage"
       - "sanitation"
+      - "TNPDCL|3"
+      - "TANGEDCO|3"
+      - "TNEB|3"
+      - "Metrowater|2"
+      - "piped water|2"
     exclusions:
       - "power struggle"
       - "power tussle"
@@ -193,14 +213,23 @@ issues:
       - "NEET|2"
       - "laptops|2"
       - "laptop|2"
+      - "breakfast scheme|2"
+      - "Pudhumai Penn|2"
+      - "Tamil Pudhalvan|2"
+      - "government school|2"
     exclusions: []
 
 # Few-shot examples embedded in the LLM prompt. These are hand-written by the
 # developers, NOT evaluation data: never reuse them in the 300-headline test set.
 prompt_examples:
-  - headline: "Power struggle in state cabinet ahead of polls"
+  - headline: "Power struggle in DMK alliance over seat sharing"
     issue: "Not an election issue"
-    evidence: "Power struggle in state cabinet"
+    evidence: "Power struggle in DMK alliance over seat sharing"
+    secondary: null
+    note: "alliance and seat-sharing politics carry no policy issue"
+  - headline: "Power struggle in AIADMK over party leadership"
+    issue: "Not an election issue"
+    evidence: "Power struggle in AIADMK"
     secondary: null
     note: "'power' refers to political control, not electricity"
   - headline: "MSP hike fails to calm mandi protests"
@@ -212,26 +241,31 @@ prompt_examples:
     evidence: "Free laptops"
     secondary: null
     note: "laptops are a student/education welfare promise"
-  - headline: "Party promises 200 free units of electricity to every household"
+  - headline: "Delta farmers worry as Mettur dam storage drops before kuruvai season"
+    issue: "Farmers and Agriculture"
+    evidence: "Delta farmers ... kuruvai season"
+    secondary: null
+  - headline: "TNPDCL announces scheduled power cuts in Chennai suburbs"
     issue: "Electricity and Utilities"
-    evidence: "200 free units of electricity"
+    evidence: "scheduled power cuts"
+    secondary: null
+  - headline: "TNPSC Group 4 results delayed, job aspirants upset"
+    issue: "Jobs and Unemployment"
+    evidence: "TNPSC Group 4 ... job aspirants"
+    secondary: null
+  - headline: "Aavin milk price increase burdens Chennai households"
+    issue: "Prices and Inflation"
+    evidence: "Aavin milk price increase"
+    secondary: null
+  - headline: "Custodial death in Sivaganga sparks protests against police"
+    issue: "Law and Order"
+    evidence: "Custodial death ... against police"
     secondary: null
   - headline: "Youth unemployment dominates campaign rallies in Bihar"
-    issue: "Jobs and Unemployment"
-    evidence: "Youth unemployment"
+    issue: "Not an election issue"
+    evidence: "in Bihar"
     secondary: null
-  - headline: "LPG cylinder prices become poll plank as households feel the pinch"
-    issue: "Prices and Inflation"
-    evidence: "LPG cylinder prices"
-    secondary: null
-  - headline: "Opposition targets government over rising crimes against women"
-    issue: "Law and Order"
-    evidence: "rising crimes against women"
-    secondary: null
-  - headline: "Farm loan waiver and free bus travel top manifesto list"
-    issue: "Farmers and Agriculture"
-    evidence: "Farm loan waiver"
-    secondary: null
+    note: "about another state, outside the configured region"
   - headline: "Cricket team wins series in Australia"
     issue: "Not an election issue"
     evidence: "Cricket team wins series"

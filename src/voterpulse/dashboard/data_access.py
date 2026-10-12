@@ -119,6 +119,7 @@ SELECT a.id AS article_id, a.headline, a.source, a.url, a.published_at, a.ingest
             THEN a.ingested_at ELSE a.published_at END AS event_time,
        c.primary_issue AS issue, c.secondary_issue AS secondary, c.evidence, c.method,
        c.keyword_issue, c.validation_status, c.model_id, c.is_relevant, c.classified_at,
+       c.region_status, c.region_evidence,
        s.label, s.compound, s.positive, s.negative, s.neutral
 FROM articles a
 LEFT JOIN classifications c ON c.article_id = a.id
@@ -159,6 +160,8 @@ def load_developer_tables(cfg: AppConfig) -> dict[str, pd.DataFrame]:
                            LEFT JOIN classifications c ON c.article_id = r.article_id
                            ORDER BY (r.status = 'pending') DESC, r.id DESC"""),
             "alerts": q("SELECT * FROM alerts ORDER BY id DESC LIMIT 200"),
+            "region": q("""SELECT region_status, COUNT(*) AS headlines FROM classifications
+                           GROUP BY region_status ORDER BY headlines DESC"""),
             "failed": q("""SELECT COUNT(*) AS unclassified FROM articles a
                            LEFT JOIN classifications c ON c.article_id = a.id WHERE c.id IS NULL"""),
         }

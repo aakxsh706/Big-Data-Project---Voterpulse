@@ -3,7 +3,7 @@
     python scripts/generate_demo_data.py            # (re)creates data/demo/voterpulse_demo.db
     VOTERPULSE_DEMO_MODE=1 streamlit run app.py     # view it  (Windows: set VOTERPULSE_DEMO_MODE=1)
 
-Every headline is invented, prefixed with "[DEMO]", attributed to fictional
+Every headline is invented (set in Tamil Nadu places), prefixed with "[DEMO]", attributed to fictional
 "(synthetic)" publications and stored with is_synthetic=1 in a database stamped
 "demo". The live database is never touched. Classification uses the keyword
 classifier (recorded honestly as keyword_fallback — no LLM is involved) and real
@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 import _bootstrap  # noqa: F401
 
 from voterpulse import database as db
+from voterpulse.classification.region_filter import RegionFilter
 from voterpulse.classification.service import HeadlineClassifier
 from voterpulse.config import get_config
 from voterpulse.ingestion.deduplicator import prepare
@@ -29,70 +30,70 @@ from voterpulse.sentiment.vader_analyzer import VaderAnalyzer
 
 log = get_logger("scripts.generate_demo_data")
 
-STATES = ["Bihar", "Punjab", "Kerala", "Assam", "Odisha", "Gujarat", "Haryana", "Jharkhand",
-          "Telangana", "Karnataka", "Maharashtra", "Rajasthan", "Tamil Nadu", "West Bengal",
-          "Uttar Pradesh", "Madhya Pradesh", "Chhattisgarh", "Goa", "Tripura", "Delhi"]
+PLACES = ["Chennai", "Madurai", "Coimbatore", "Tiruchirappalli", "Salem", "Tirunelveli", "Erode",
+          "Vellore", "Thanjavur", "Thoothukudi", "Kanchipuram", "Dindigul", "Cuddalore", "Nagapattinam",
+          "Tiruvarur", "Kanyakumari", "Krishnagiri", "Namakkal", "Villupuram", "Ramanathapuram"]
 SOURCES = ["Demo Herald (synthetic)", "Sample Times (synthetic)", "Example Express (synthetic)",
            "Placeholder Post (synthetic)", "Mock Chronicle (synthetic)"]
 
 TEMPLATES: dict[str, dict[str, list[str]]] = {
     "jobs": {
-        "pos": ["{state} recruitment drive fills {n} government jobs, youth welcome move",
-                "New factories promise {n} jobs in {state}, boosting hopes",
-                "Employment scheme helps {n} families find steady work in {state}"],
-        "neg": ["Unemployment crisis deepens in {state} as {n} graduates struggle to find jobs",
-                "Layoffs hit {n} workers in {state}, anger grows ahead of polls",
-                "Jobless youth protest delayed recruitment of {n} posts in {state}"],
-        "neu": ["Parties outline jobs plans in {state} manifestos ({n} pages)",
-                "{state} releases employment data for ward {n}",
-                "Candidates debate MGNREGA work days in {state} constituency {n}"],
+        "pos": ["{place} recruitment drive fills {n} government jobs, youth welcome move",
+                "New factories promise {n} jobs in {place}, boosting hopes",
+                "Employment scheme helps {n} families find steady work in {place}"],
+        "neg": ["Unemployment crisis deepens in {place} as {n} graduates struggle to find jobs",
+                "Layoffs hit {n} workers in {place}, anger grows ahead of polls",
+                "Jobless youth protest delayed recruitment of {n} posts in {place}"],
+        "neu": ["Parties outline jobs plans in {place} manifestos ({n} pages)",
+                "{place} releases employment data for ward {n}",
+                "Candidates debate MGNREGA work days in {place} constituency {n}"],
     },
     "prices": {
-        "pos": ["LPG cylinder price cut brings relief to households in {state} district {n}",
-                "Vegetable prices ease in {n} {state} markets, shoppers relieved"],
-        "neg": ["Soaring inflation hurts poor families in {state} ward {n}, opposition attacks government",
-                "Onion price rise angers households in {state} town {n}",
-                "Petrol price hike burdens commuters in {state} city {n}"],
-        "neu": ["Price rise discussed at {state} campaign stop {n}",
-                "{state} retail inflation figures released for district {n}"],
+        "pos": ["LPG cylinder price cut brings relief to households in {place} district {n}",
+                "Vegetable prices ease in {n} {place} markets, shoppers relieved"],
+        "neg": ["Soaring inflation hurts poor families in {place} ward {n}, opposition attacks government",
+                "Onion price rise angers households in {place} town {n}",
+                "Petrol price hike burdens commuters in {place} city {n}"],
+        "neu": ["Price rise discussed at {place} campaign stop {n}",
+                "{place} retail inflation figures released for district {n}"],
     },
     "law_order": {
-        "pos": ["{state} police praised as crime rate falls in {n} districts, residents feel safer",
-                "New women's safety helpline wins support in {state} district {n}"],
-        "neg": ["Violence at rally leaves {n} injured in {state}",
-                "Rising crime against women sparks outrage in {state} district {n}"],
-        "neu": ["Police deploy {n} extra companies for polling in {state}",
-                "{state} parties discuss law and order in debate {n}"],
+        "pos": ["{place} police praised as crime rate falls in {n} districts, residents feel safer",
+                "New women's safety helpline wins support in {place} district {n}"],
+        "neg": ["Violence at rally leaves {n} injured in {place}",
+                "Rising crime against women sparks outrage in {place} district {n}"],
+        "neu": ["Police deploy {n} extra companies for polling in {place}",
+                "{place} parties discuss law and order in debate {n}"],
     },
     "farmers": {
-        "pos": ["MSP increase welcomed by farmers in {state} district {n}",
-                "Record crop procurement brings relief to {n} {state} farmers"],
-        "neg": ["Farmers protest delayed MSP payments in {state} district {n}",
-                "Crop failure leaves {n} {state} farmers in debt and despair"],
-        "neu": ["Parties pitch farm loan waiver in {state} manifestos ({n} pages)",
-                "{state} mandi arrivals reported for week {n}"],
+        "pos": ["MSP increase welcomed by farmers in {place} district {n}",
+                "Record crop procurement brings relief to {n} {place} farmers"],
+        "neg": ["Farmers protest delayed MSP payments in {place} district {n}",
+                "Crop failure leaves {n} {place} farmers in debt and despair"],
+        "neu": ["Parties pitch farm loan waiver in {place} manifestos ({n} pages)",
+                "{place} mandi arrivals reported for week {n}"],
     },
     "utilities": {
-        "pos": ["{state} promises 24-hour power supply to {n} villages, residents hopeful",
-                "Free electricity units scheme praised in {state} town {n}"],
-        "neg": ["Power cuts anger residents of {n} {state} villages as summer peaks",
-                "Drinking water shortage hits {n} villages in {state}"],
-        "neu": ["{state} discoms announce power tariff review for zone {n}"],
+        "pos": ["{place} promises 24-hour power supply to {n} villages, residents hopeful",
+                "Free electricity units scheme praised in {place} ward {n}"],
+        "neg": ["Power cuts anger residents of {n} {place} villages as summer peaks",
+                "Drinking water shortage hits {n} villages in {place}"],
+        "neu": ["{place} discoms announce power tariff review for zone {n}"],
     },
     "health_education": {
-        "pos": ["New hospital opens in {state}, improving access to healthcare for {n} villages",
-                "Free laptops for students win praise in {state} district {n}"],
-        "neg": ["Shortage of doctors hurts hospitals in {state} district {n}",
-                "School dropout rise worries parents in {n} {state} villages"],
-        "neu": ["Parties promise schools and hospitals in {state} manifestos ({n} pages)",
-                "{state} education budget presented for district {n}",
-                "{state} health department publishes hospital list for zone {n}"],
+        "pos": ["New hospital opens in {place}, improving access to healthcare for {n} villages",
+                "Free laptops for students win praise in {place} district {n}"],
+        "neg": ["Shortage of doctors hurts hospitals in {place} district {n}",
+                "School dropout rise worries parents in {n} {place} villages"],
+        "neu": ["Parties promise schools and hospitals in {place} manifestos ({n} pages)",
+                "{place} education budget presented for district {n}",
+                "{place} health department publishes hospital list for zone {n}"],
     },
     "irrelevant": {
-        "neu": ["Cricket team wins series at {state} stadium in match {n}",
-                "Film star visits temple in {state} town {n}",
-                "Candidates file nomination papers in {state} seat {n}",
-                "Power struggle in {state} cabinet over portfolio {n}"],
+        "neu": ["Cricket team wins series at {place} stadium in match {n}",
+                "Film star visits temple in {place} town {n}",
+                "Candidates file nomination papers in {place} seat {n}",
+                "Power struggle in {place} cabinet over portfolio {n}"],
     },
 }
 
@@ -115,7 +116,7 @@ def _pick(rng: random.Random, key: str, phase: str) -> str:
     roll = rng.random()
     tone = "pos" if roll < p_pos else "neg" if roll < p_pos + p_neg else "neu"
     options = TEMPLATES[key].get(tone) or TEMPLATES[key]["neu"]
-    return rng.choice(options).format(state=rng.choice(STATES), n=rng.randint(2, 999))
+    return rng.choice(options).format(place=rng.choice(PLACES), n=rng.randint(2, 999))
 
 
 def generate(days: int = 30, seed: int = 7) -> dict[str, int]:
@@ -123,14 +124,18 @@ def generate(days: int = 30, seed: int = 7) -> dict[str, int]:
     path = cfg.demo_db_path
     if path.resolve() == cfg.live_db_path.resolve():
         raise SystemExit("Refusing: demo_path and live database path are the same file.")
-    for suffix in ("", "-wal", "-shm"):
-        candidate = path.with_name(path.name + suffix)
-        if candidate.exists():
-            candidate.unlink()
     conn = db.init_db(path, "demo")
+    # Keep the journal identity and Mongo deletion queue when regenerating. Unlinking
+    # this file would leave the previous demo corpus in MongoDB without tombstones.
+    with db.transaction(conn):
+        conn.execute("DELETE FROM articles")
+        conn.execute("DELETE FROM alerts")
+        conn.execute("DELETE FROM pipeline_runs")
+        conn.execute("DELETE FROM classification_cache")
     rng = random.Random(seed)
     now = datetime.now(timezone.utc).replace(microsecond=0)
     classifier = HeadlineClassifier(cfg.issues, llm=None)
+    region_filter = RegionFilter(cfg.settings.region)
     vader = VaderAnalyzer(cfg.thresholds.headline)
     stats = {"inserted": 0, "duplicates": 0, "accepted": 0, "rejected": 0, "issue_mismatch": 0}
     expected_name = {i.key: i.name for i in cfg.issues.issues}
@@ -156,7 +161,9 @@ def generate(days: int = 30, seed: int = 7) -> dict[str, int]:
                 outcome = classifier.classify(text)
                 outcome.error = "synthetic demo data: keyword classifier used, no LLM involved"
                 relevant = outcome.primary_issue != cfg.issues.not_relevant_label
-                db.save_classification(conn, article_id, outcome, relevant, ingested)
+                region = region_filter.check(text)
+                db.save_classification(conn, article_id, outcome, relevant, ingested,
+                                       region_status=region.status, region_evidence=region.evidence)
                 if relevant:
                     db.save_sentiment(conn, article_id, vader.score(text), ingested)
                     stats["accepted"] += 1

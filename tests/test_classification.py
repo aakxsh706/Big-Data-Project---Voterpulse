@@ -59,7 +59,7 @@ def test_prompt_generated_from_config(cfg):
     prompt = build_system_prompt(cfg.issues)
     for issue in cfg.issues.issues:
         assert issue.name in prompt
-    assert "Power struggle in state cabinet" in prompt   # irrelevant example
+    assert "Power struggle in AIADMK" in prompt          # irrelevant example
     assert "MSP hike fails to calm mandi protests" in prompt
     schema = response_schema(cfg.issues)
     assert schema["properties"]["issue"]["enum"] == cfg.issues.all_labels
@@ -211,3 +211,23 @@ def test_fallback_results_are_not_cached(cfg, conn):
     clf, _ = _client(cfg, lambda url, payload, **kw: ollama_chat("garbage"))
     HeadlineClassifier(cfg.issues, clf, conn).classify("MSP row", "hash2")
     assert conn.execute("SELECT COUNT(*) FROM classification_cache").fetchone()[0] == 0
+
+
+def test_region_scoping_in_prompt(cfg):
+    assert cfg.settings.region.name == "Tamil Nadu"
+    scoped = build_system_prompt(cfg.issues, "Tamil Nadu")
+    national = build_system_prompt(cfg.issues, None)
+    assert "news about Tamil Nadu, India" in scoped
+    assert "clearly only about another Indian state" in scoped
+    assert "another Indian state" not in national
+    assert prompt_version(cfg.issues, "Tamil Nadu") != prompt_version(cfg.issues, None)  # cache separation
+
+
+def test_client_uses_configured_region(cfg):
+    clf, session = _client(cfg, lambda url, payload, **kw: ollama_answer(NOT, "in Bihar"))
+    assert clf.region == "Tamil Nadu"
+    out = HeadlineClassifier(cfg.issues, clf).classify("Youth unemployment dominates campaign rallies in Bihar")
+    assert out.primary_issue == NOT and out.method is ClassificationMethod.LLM
+    assert "Tamil Nadu" in session.post_calls[0]["messages"][0]["content"]
+    # keyword baseline has no notion of region -> disagreement goes to review
+    assert REASON_DISAGREEMENT in out.review_reasons

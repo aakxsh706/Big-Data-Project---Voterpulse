@@ -5,10 +5,49 @@ app:
   name: "VoterPulse Lite"
   timezone_display: "Asia/Kolkata"   # dashboard shows IST (UTC+05:30, no DST)
 
+# Geographic scope. RSS searches target this region, the LLM rejects headlines that
+# are clearly only about another state or country, and the dashboard names it.
+# Set name to null for all-India coverage (and use national queries in rss_feeds.yaml).
+region:
+  name: "Tamil Nadu"
+  # Deterministic region filter (applied after classification): a headline that names
+  # one of `other_places` and none of `local_terms` is stored for audit but NOT counted.
+  # Headlines naming no place are kept (the searches already target Tamil Nadu).
+  local_terms: ["Tamil Nadu", "Tamilnadu", "TN", "Chennai", "Madras", "Madurai", "Coimbatore", "Kovai",
+                "Tiruchirappalli", "Trichy", "Salem", "Tirunelveli", "Erode", "Vellore", "Thanjavur",
+                "Thoothukudi", "Tuticorin", "Kanchipuram", "Dindigul", "Cuddalore", "Nagapattinam",
+                "Tiruvarur", "Kanyakumari", "Krishnagiri", "Hosur", "Namakkal", "Villupuram", "Tiruppur",
+                "Ramanathapuram", "Sivaganga", "Pudukkottai", "Karur", "Nilgiris", "Ooty", "Theni",
+                "Virudhunagar", "Sivakasi", "Ariyalur", "Perambalur", "Dharmapuri", "Tiruvannamalai",
+                "Chengalpattu", "Ranipet", "Tenkasi", "Kallakurichi", "Mayiladuthurai", "Tirupattur",
+                "Cauvery", "Mettur", "Ayyakannu", "DMK", "AIADMK", "TVK", "PMK", "MDMK", "VCK", "NTK", "DMDK",
+                "Stalin", "Udhayanidhi", "Palaniswami", "Edappadi", "TNPSC", "TNPDCL", "TANGEDCO", "TNEB",
+                "Aavin", "TNSTC", "Metrowater", "Fort St George", "Madras High Court"]
+  other_places: ["Andhra Pradesh", "Andhra", "Arunachal", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat",
+                 "Haryana", "Himachal", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra",
+                 "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim",
+                 "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal", "Delhi", "Jammu",
+                 "Kashmir", "Ladakh", "Puducherry", "Pondicherry", "Mumbai", "Bengaluru", "Bangalore",
+                 "Hyderabad", "Kolkata", "Pune", "Ahmedabad", "Lucknow", "Patna", "Jaipur", "Bhopal",
+                 "Thiruvananthapuram", "Kochi", "Mysuru", "Noida", "Gurugram", "Bhubaneswar", "Guwahati"]
+
 database:
   path: "data/voterpulse.db"         # env: VOTERPULSE_DB_PATH
   demo_path: "data/demo/voterpulse_demo.db"
   busy_timeout_ms: 10000             # wait for the writer instead of failing on lock
+
+# Enable after starting MongoDB and installing requirements-big-data.txt.
+# SQLite keeps collection/classification state; MongoDB stores the Spark corpus.
+big_data:
+  enabled: false                     # env: VOTERPULSE_BIG_DATA_ENABLED=1
+  mongo_uri: "mongodb://127.0.0.1:27017" # env: VOTERPULSE_MONGO_URI
+  mongo_database: "voterpulse"         # env: VOTERPULSE_MONGO_DATABASE
+  mongo_demo_database: "voterpulse_demo" # env: VOTERPULSE_MONGO_DEMO_DATABASE
+  mongo_timeout_ms: 5000
+  sync_batch_size: 500
+  spark_master: "local[*]"            # env: VOTERPULSE_SPARK_MASTER
+  spark_partitions: 4                 # env: VOTERPULSE_SPARK_PARTITIONS
+  spark_connector: "org.mongodb.spark:mongo-spark-connector_2.12:10.7.0"
 
 demo:
   enabled: false                     # env: VOTERPULSE_DEMO_MODE=1

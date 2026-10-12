@@ -2,7 +2,8 @@
 
 ## Processes
 
-Two independent processes share one SQLite file:
+Two core processes share one SQLite file. The optional MongoDB + Spark profile adds
+article synchronization and a separate Spark batch process (see below):
 
 ```
 ┌──────────────────────────── Process 1: collector ───────────────────────────┐
@@ -17,6 +18,7 @@ Two independent processes share one SQLite file:
 │                     validator (schema+evidence) ─► keyword cross-check      │
 │                              │ fallback if down/invalid                     │
 │                              ▼                                              │
+│                 region filter (Tamil Nadu terms vs other states/cities)     │
 │                 relevant? ──yes──► VADER ──► sentiment_scores               │
 │                     │no                                                     │
 │                     └──► stored for audit only                              │
@@ -57,14 +59,16 @@ atomic run lock in `pipeline_runs` (`database.start_run`). A run stuck for longe
 | `monitoring/` | Pipeline orchestration, alerts, scheduler. |
 | `dashboard/` | Read-side data access, Plotly charts, Streamlit components. |
 | `evaluation/` | Metrics, annotation sampling, classifier and sentiment evaluation, benchmark. |
+| `big_data/` | Durable MongoDB article synchronization and Spark sentiment/aggregation batches. |
 
 Additions to the suggested layout: `logging_utils.py` (shared logging),
 `classification/service.py` (keeps fallback logic out of the reusable LLM client),
+`classification/region_filter.py` (deterministic Tamil Nadu scope check),
 `evaluation/metrics.py` and `evaluation/sampling.py` (shared by several scripts), and
 `pages/0_Overview.py` (with `app.py` as a small router, so the sidebar reads
 "Overview").
 
-## Database schema (migration 1)
+## Database schema (migrations 1–3)
 
 ```
 articles 1──1 classifications           (UNIQUE article_id, CHECK secondary <> primary)
@@ -75,6 +79,16 @@ pipeline_runs                           (one row per run, status + counters + er
 alerts                                  (UNIQUE partial index: one active alert per issue)
 meta                                    (dataset_kind = live | demo)
 ```
+
+Migration 2 added `classifications.region_status` (`in_region` | `out_of_region` |
+`not_checked`), `classifications.region_evidence` (the matched place) and
+`pipeline_runs.out_of_region`. An existing version-1 database upgrades automatically on
+start.
+
+Migration 3 adds a durable article change outbox, deletion tombstones, and revision
+tracking. Triggers capture new articles, reclassification, region changes, sentiment
+updates, and deletions atomically with the original change. Existing articles are queued
+for their first Mongo sync.
 
 Foreign keys use `ON DELETE CASCADE`. Indexes cover publication and ingestion time,
 issue/relevance, method, review status, run start time and sentiment label.
@@ -93,3 +107,18 @@ migration.
 | Invalid LLM answer | Raw answer kept; keyword fallback; review queue entry. |
 | Exception on one article | Rolled back, counted in `failed`, retried next run. |
 | Crash mid-run | Run row becomes `abandoned` after 30 minutes; the next run proceeds. |
+| MongoDB unavailable (profile enabled) | Local collection remains committed; run becomes `partial`; queued changes retry next time. |
+| Spark batch fails | Previous successful Mongo summaries remain visible; incomplete output is never published. |
+
+## MongoDB + Spark profile
+
+`big_data.enabled` adds a batched synchronization step after classification and alerts.
+MongoDB stores denormalized article documents with normalized hashes as stable IDs.
+`scripts/run_big_data.py` syncs pending changes and runs Spark separately from collection.
+Spark reads MongoDB directly through the MongoDB Spark Connector, scores accepted
+headlines in parallel, groups daily metrics by primary issue, and writes versioned
+summaries back to MongoDB. Developer Insights reads completed batch results. The existing
+Overview, Issue Explorer, reviews, and alerts continue to use SQLite.
+
+See [big_data.md](big_data.md) for the storage contract, diagram, failure behavior,
+cluster configuration, and the limits of local parallel execution.

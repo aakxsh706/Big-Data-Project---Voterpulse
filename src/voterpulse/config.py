@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -162,6 +162,28 @@ class LoggingSettings(BaseModel):
     backup_count: int = 3
 
 
+class BigDataSettings(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    enabled: bool = False
+    mongo_uri: SecretStr = SecretStr("mongodb://127.0.0.1:27017")
+    mongo_database: str = Field(default="voterpulse", pattern=r"^[A-Za-z0-9_-]+$", max_length=63)
+    mongo_demo_database: str = Field(default="voterpulse_demo", pattern=r"^[A-Za-z0-9_-]+$", max_length=63)
+    mongo_timeout_ms: int = Field(default=5000, ge=100, le=120000)
+    sync_batch_size: int = Field(default=500, ge=1, le=10000)
+    spark_master: str = Field(default="local[*]", min_length=1)
+    spark_partitions: int = Field(default=4, ge=2, le=10000)
+    spark_connector: str = "org.mongodb.spark:mongo-spark-connector_2.12:10.7.0"
+
+    @model_validator(mode="after")
+    def _check(self) -> "BigDataSettings":
+        if self.mongo_database == self.mongo_demo_database:
+            raise ValueError("MongoDB live and demo database names must differ")
+        if not self.mongo_uri.get_secret_value().startswith(("mongodb://", "mongodb+srv://")):
+            raise ValueError("MongoDB URI must use mongodb:// or mongodb+srv://")
+        return self
+
+
 class PipelineSettings(BaseModel):
     interval_minutes: int = 15
     max_classifications_per_run: int = 120
@@ -191,13 +213,21 @@ class AlertSettings(BaseModel):
         return self
 
 
+class RegionSettings(BaseModel):
+    name: str | None = None  # None = all-India coverage
+    local_terms: list[str] = Field(default_factory=list)
+    other_places: list[str] = Field(default_factory=list)
+
+
 class Settings(BaseModel):
+    region: RegionSettings = Field(default_factory=RegionSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     demo_enabled: bool = False
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
     aggregation: AggregationSettings = Field(default_factory=AggregationSettings)
     alerts: AlertSettings = Field(default_factory=AlertSettings)
+    big_data: BigDataSettings = Field(default_factory=BigDataSettings)
 
 
 class AppConfig(BaseModel):
@@ -263,13 +293,23 @@ def load_config(config_dir: Path | None = None, env: dict[str, str] | None = Non
         env = dict(os.environ)
 
     raw_settings = _read_yaml(config_dir / "settings.yaml")
+    big_data = dict(raw_settings.get("big_data") or {})
+    for name in ("mongo_uri", "mongo_database", "mongo_demo_database", "mongo_timeout_ms",
+                 "sync_batch_size", "spark_master", "spark_partitions"):
+        value = env.get("VOTERPULSE_" + name.upper())
+        if value:
+            big_data[name] = value
+    if env.get("VOTERPULSE_BIG_DATA_ENABLED"):
+        big_data["enabled"] = _env_bool(env["VOTERPULSE_BIG_DATA_ENABLED"])
     settings = Settings(
+        region=RegionSettings(**(raw_settings.get("region") or {})),
         database=DatabaseSettings(**raw_settings.get("database", {})),
         demo_enabled=bool(raw_settings.get("demo", {}).get("enabled", False)),
         logging=LoggingSettings(**raw_settings.get("logging", {})),
         pipeline=PipelineSettings(**raw_settings.get("pipeline", {})),
         aggregation=AggregationSettings(**raw_settings.get("aggregation", {})),
         alerts=AlertSettings(**raw_settings.get("alerts", {})),
+        big_data=BigDataSettings(**big_data),
     )
     model = ModelConfig(**_read_yaml(config_dir / "model.yaml"))
 

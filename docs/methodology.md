@@ -5,8 +5,11 @@
 ## 1. Data collection
 
 * **Source:** Google News RSS search, India edition in English (`hl=en-IN`, `gl=IN`,
-  `ceid=IN:en`). There is one search per issue (`config/rss_feeds.yaml`), and each
-  search is limited to the last 7 days (`when:7d`).
+  `ceid=IN:en`). There is one **Tamil Nadu** search per issue (`config/rss_feeds.yaml`),
+  each limited to the last 7 days (`when:7d`). Queries are issue-focused (for example
+  `("Tamil Nadu" OR Chennai) (unemployment OR jobs OR TNPSC …)`) rather than requiring the
+  word "election". In testing, "election" queries returned mostly polling-procedure
+  stories with no policy content.
 * **Frequency:** every 15 minutes, from a separate scheduler process. Feeds are fetched
   one after another with a 2-second pause, a 15-second timeout and at most 3 retries
   (backoff of 2, 4 and 8 seconds). A failed feed is logged and skipped; the others continue.
@@ -50,6 +53,15 @@ requests or stop serving a feed at any time.
    After 3 consecutive connection failures in a run, the LLM is skipped for the rest
    of that run (circuit breaker). `scripts/run_pipeline.py --reclassify-fallbacks`
    re-queues those headlines once Ollama is back.
+
+7. **Region filter (Tamil Nadu).** The LLM prompt names the region, but tests showed the
+   3B model often keeps headlines about other states. A deterministic rule therefore
+   marks a headline `out_of_region` when it names a place from `region.other_places`
+   (other states, union territories and big cities) and nothing from `region.local_terms`
+   (Tamil Nadu districts, cities, state parties and agencies such as TNPSC and TNPDCL).
+   Headlines naming no place stay in, because the searches already target Tamil Nadu.
+   Out-of-region headlines keep their issue label for audit but are never scored or
+   counted. `run_pipeline.py --recheck-region` re-applies edited lists.
 
 Each classification stores the primary and secondary issue, evidence, method, keyword
 label, model identifier with digest, prompt version, raw response, validation status,

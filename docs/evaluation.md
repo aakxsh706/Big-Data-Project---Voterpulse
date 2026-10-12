@@ -24,7 +24,9 @@ running the scripts below on headlines annotated by people. Results land in
    *wording of the headline*, not whether the news is good for them.
 5. Save as `data/evaluation/annotated.csv`.
 
-Annotation guidance: label the issue the headline is mainly about. Party infighting,
+Annotation guidance: label the issue the headline is mainly about. A headline that is
+only about another state or country is *Not an election issue* (the system scope is
+Tamil Nadu). Party infighting,
 candidate lists and polling logistics are *Not an election issue*. When a headline
 covers two issues, the primary is the one its main verb or subject concerns.
 
